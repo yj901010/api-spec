@@ -186,7 +186,6 @@ export class App {
                 <h2>Input & Config</h2>
               </div>
               <div class="panel-actions">
-                <button class="icon-button small-button" data-action="toggle-panel" data-panel="left">접기</button>
                 <button class="icon-button small-button" data-action="maximize-panel" data-panel="left">최대화</button>
               </div>
             </div>
@@ -431,7 +430,6 @@ export class App {
               </div>
               <div class="panel-actions">
                 <button class="icon-button small-button" data-action="toggle-diff-mode">Diff 토글</button>
-                <button class="icon-button small-button" data-action="toggle-panel" data-panel="center">접기</button>
                 <button class="icon-button small-button" data-action="maximize-panel" data-panel="center">최대화</button>
               </div>
             </div>
@@ -452,7 +450,6 @@ export class App {
                 <h2>Code / Spec / Export</h2>
               </div>
               <div class="panel-actions">
-                <button class="icon-button small-button" data-action="toggle-panel" data-panel="right">접기</button>
                 <button class="icon-button small-button" data-action="maximize-panel" data-panel="right">최대화</button>
               </div>
             </div>
@@ -523,11 +520,8 @@ export class App {
     setButton('[data-action="import"]', '가져오기');
     setButton('[data-action="copy-active-result"]', '현재 탭 복사');
     setButton('[data-action="toggle-diff-mode"]', 'Diff 변경만', 'Diff 변경만 보기 토글');
-    setButton('[data-action="toggle-panel"][data-panel="left"]', '접기', '왼쪽 패널 접기 또는 열기');
     setButton('[data-action="maximize-panel"][data-panel="left"]', '최대화', '왼쪽 패널 최대화 또는 복원');
-    setButton('[data-action="toggle-panel"][data-panel="center"]', '접기', '가운데 패널 접기 또는 열기');
     setButton('[data-action="maximize-panel"][data-panel="center"]', '최대화', '가운데 패널 최대화 또는 복원');
-    setButton('[data-action="toggle-panel"][data-panel="right"]', '접기', '오른쪽 패널 접기 또는 열기');
     setButton('[data-action="maximize-panel"][data-panel="right"]', '최대화', '오른쪽 패널 최대화 또는 복원');
 
     const splitters = [
@@ -819,6 +813,7 @@ export class App {
         case 'restore-layout':
           this.store.update((draft) => {
             draft.layout = structuredClone(DEFAULT_LAYOUT);
+            draft.layout.collapsedPanels = { left: false, center: false, right: false };
           });
           break;
         case 'copy-active-result':
@@ -828,9 +823,6 @@ export class App {
           if (!actionElement.classList.contains('issue-card-static')) {
             this.jumpToIssue(actionElement.dataset.target as ParseIssue['target'], Number(actionElement.dataset.issueIndex));
           }
-          break;
-        case 'toggle-panel':
-          this.togglePanel(actionElement.dataset.panel as 'left' | 'center' | 'right');
           break;
         case 'maximize-panel':
           this.maximizePanel(actionElement.dataset.panel as 'left' | 'center' | 'right');
@@ -1312,21 +1304,6 @@ export class App {
     textarea.scrollTop = selection.scrollTop;
   }
 
-  private togglePanel(panel: 'left' | 'center' | 'right'): void {
-    this.store.update((draft) => {
-      if (draft.layout.maximizedPanel === panel) return;
-      const collapsed = draft.layout.collapsedPanels;
-      const isCollapsed = collapsed[panel];
-      if (!isCollapsed && [collapsed.left, collapsed.center, collapsed.right].filter((value) => !value).length <= 1) return;
-      if (isCollapsed && draft.layout.maximizedPanel) {
-        draft.layout.maximizedPanel = null;
-      }
-      collapsed[panel] = !isCollapsed;
-      if (!collapsed.left && !collapsed.center && !collapsed.right) draft.layout.maximizedPanel = null;
-      if (draft.layout.maximizedPanel === panel && collapsed[panel]) draft.layout.maximizedPanel = null;
-    });
-  }
-
   private maximizePanel(panel: 'left' | 'center' | 'right'): void {
     this.store.update((draft) => {
       draft.layout.maximizedPanel = draft.layout.maximizedPanel === panel ? null : panel;
@@ -1335,24 +1312,39 @@ export class App {
 
   private applyLayout(): void {
     const layout = this.snapshot.workspace.layout;
-    const workspaceColumns = computeWorkspaceColumns(layout);
-    this.workspaceLayout.style.gridTemplateColumns = workspaceColumns;
-    this.workspaceLayout.style.setProperty('--legacy-grid-columns', workspaceColumns);
+    const displayLayout = {
+      ...layout,
+      collapsedPanels: { left: false, center: false, right: false },
+    };
+    const workspaceColumns = computeWorkspaceColumns(displayLayout);
+    const maximized = layout.maximizedPanel;
+    const appliedWorkspaceColumns = maximized ? '1fr 0px 0px 0px 0px' : workspaceColumns;
+    this.workspaceLayout.style.gridTemplateColumns = appliedWorkspaceColumns;
+    this.workspaceLayout.style.setProperty('--legacy-grid-columns', appliedWorkspaceColumns);
     this.editorSplitLayout.style.gridTemplateRows = `${layout.editorSplit}fr 12px ${100 - layout.editorSplit}fr`;
 
     (['left', 'center', 'right'] as const).forEach((panel) => {
       const element = this.root.querySelector(`[data-panel="${panel}"]`) as HTMLElement;
-      const panelState = describePanelState(layout, panel);
-      const hidden = Boolean(layout.maximizedPanel && layout.maximizedPanel !== panel);
+      const panelState = describePanelState(displayLayout, panel);
+      const hidden = Boolean(maximized && maximized !== panel);
       element.classList.toggle('panel-hidden', hidden);
-      element.classList.toggle('panel-collapsed', !hidden && panelState.collapsed);
+      element.classList.toggle('panel-collapsed', false);
       element.classList.toggle('panel-maximized', panelState.maximized);
+      element.hidden = hidden;
+      element.style.display = hidden ? 'none' : '';
+      element.style.gridColumn = maximized && maximized === panel ? '1 / -1' : '';
     });
 
     (['left-center', 'center-right', 'request-response'] as const).forEach((splitterName) => {
       const splitter = this.root.querySelector(`[data-splitter="${splitterName}"]`) as HTMLElement | null;
       if (!splitter) return;
-      const splitterState = describeSplitterState(layout, splitterName);
+      if (splitterName !== 'request-response' && maximized) {
+        splitter.style.display = 'none';
+        splitter.tabIndex = -1;
+        splitter.setAttribute('aria-hidden', 'true');
+        return;
+      }
+      const splitterState = describeSplitterState(displayLayout, splitterName);
       splitter.style.display = splitterState.hidden ? 'none' : '';
       splitter.tabIndex = splitterState.hidden ? -1 : 0;
       splitter.setAttribute('aria-hidden', splitterState.hidden ? 'true' : 'false');
@@ -1363,15 +1355,8 @@ export class App {
     });
 
     (['left', 'center', 'right'] as const).forEach((panel) => {
-      const toggleButton = this.root.querySelector(`[data-action="toggle-panel"][data-panel="${panel}"]`) as HTMLButtonElement | null;
       const maximizeButton = this.root.querySelector(`[data-action="maximize-panel"][data-panel="${panel}"]`) as HTMLButtonElement | null;
-      const panelState = describePanelState(layout, panel);
-      if (toggleButton) {
-        toggleButton.textContent = panelState.toggleLabel;
-        toggleButton.setAttribute('aria-expanded', panelState.toggleExpanded ? 'true' : 'false');
-        toggleButton.disabled = panelState.toggleDisabled;
-        toggleButton.setAttribute('aria-disabled', panelState.toggleDisabled ? 'true' : 'false');
-      }
+      const panelState = describePanelState(displayLayout, panel);
       if (maximizeButton) {
         maximizeButton.textContent = panelState.maximizeLabel;
         maximizeButton.setAttribute('aria-pressed', panelState.maximized ? 'true' : 'false');

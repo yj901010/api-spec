@@ -575,9 +575,17 @@ test('computeWorkspaceColumns reflects maximized and collapsed layout state', ()
     maximizedPanel: 'center',
     showOnlyDiffChanges: false,
   });
+  const collapsed = computeWorkspaceColumns({
+    columnSizes: [35, 31, 34],
+    editorSplit: 52,
+    collapsedPanels: { left: true, center: false, right: false },
+    maximizedPanel: null,
+    showOnlyDiffChanges: false,
+  });
 
   assert.match(normal, /12px/);
   assert.match(maximized, /^0px 0px calc\(calc\(100% - 0px\) \* 1\.000000\) 0px 0px$/);
+  assert.match(collapsed, /^0px 0px calc\(calc\(100% - 12px\) \* 0\.\d+\) 12px calc\(calc\(100% - 12px\) \* 0\.\d+\)$/);
 });
 
 test('dockview layout persistence round-trips valid layouts and ignores invalid ones', () => {

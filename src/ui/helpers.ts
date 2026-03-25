@@ -71,11 +71,9 @@ export function renderGutterHtml(source: string, issues: ParseIssue[], selectedI
 }
 
 export function computeWorkspaceColumns(layout: LayoutState): string {
-  const collapsedWidth = 64;
-  const gutterWidth = layout.maximizedPanel ? 0 : 12;
+  const gutterWidth = 12;
   const panels: Array<'left' | 'center' | 'right'> = ['left', 'center', 'right'];
   const effectiveCollapsed = { ...layout.collapsedPanels };
-  const hiddenWidth = layout.maximizedPanel ? 0 : collapsedWidth;
 
   if (layout.maximizedPanel) {
     effectiveCollapsed.left = layout.maximizedPanel !== 'left';
@@ -85,16 +83,17 @@ export function computeWorkspaceColumns(layout: LayoutState): string {
 
   const visibleWeights = panels.map((panel, index) => (effectiveCollapsed[panel] ? 0 : layout.columnSizes[index]!));
   const visibleWeightSum = visibleWeights.reduce((sum, value) => sum + value, 0) || 1;
-  const fixedPanels = panels.filter((panel) => effectiveCollapsed[panel]).length * hiddenWidth;
-  const gutterCount = layout.maximizedPanel ? 0 : 2;
-  const remainingExpr = `calc(100% - ${fixedPanels + gutterCount * gutterWidth}px)`;
+  const leftCenterVisible = !effectiveCollapsed.left && !effectiveCollapsed.center && !layout.maximizedPanel;
+  const centerRightVisible = !effectiveCollapsed.center && !effectiveCollapsed.right && !layout.maximizedPanel;
+  const visibleGutters = Number(leftCenterVisible) + Number(centerRightVisible);
+  const remainingExpr = `calc(100% - ${visibleGutters * gutterWidth}px)`;
 
   const panelWidth = (panel: 'left' | 'center' | 'right', index: number): string => {
-    if (effectiveCollapsed[panel]) return `${hiddenWidth}px`;
+    if (effectiveCollapsed[panel]) return '0px';
     return `calc(${remainingExpr} * ${(visibleWeights[index]! / visibleWeightSum).toFixed(6)})`;
   };
 
-  return `${panelWidth('left', 0)} ${gutterCount > 0 ? `${gutterWidth}px` : '0px'} ${panelWidth('center', 1)} ${gutterCount > 0 ? `${gutterWidth}px` : '0px'} ${panelWidth('right', 2)}`;
+  return `${panelWidth('left', 0)} ${leftCenterVisible ? `${gutterWidth}px` : '0px'} ${panelWidth('center', 1)} ${centerRightVisible ? `${gutterWidth}px` : '0px'} ${panelWidth('right', 2)}`;
 }
 
 export function canTogglePanel(layout: LayoutState, panel: WorkspacePanel): boolean {

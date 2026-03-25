@@ -73,7 +73,11 @@
   text-transform: uppercase;
 }
 
-.alpha-shell,
+.alpha-shell {
+  height: calc(100vh - 112px);
+  min-height: 820px;
+}
+
 .legacy-shell {
   height: calc(100vh - 112px);
   min-height: 820px;
@@ -777,7 +781,11 @@
 
 @media (max-width: 1100px) {
   .mode-loading,
-  .alpha-shell,
+  .alpha-shell {
+    height: calc(100vh - 96px);
+    min-height: 680px;
+  }
+
   .legacy-shell {
     height: calc(100vh - 96px);
     min-height: 680px;
